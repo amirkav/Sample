@@ -17,8 +17,8 @@ wharton.wkfl <- "C:/Users/amir/Documents/_My_Academics__General/R/R_Projects/Wha
 db="pgefinal"
 verbose=F
 con <- dbConnect(dbDriver("MySQL"), 
-                 host = "emacdb.c07mqwpylqtq.us-west-1.rds.amazonaws.com",
-                 user = "amirk", password = "wharton20i3pg3", 
+                 host = "******",
+                 user = "*****", password = "*****", 
                  dbname = "pgefinal")
 (tabs.list = dbListTables(con))
 dbDisconnect(con)
