@@ -1,0 +1,426 @@
+##################################################################################
+### VISUALIZATION
+    viz_partimat <- function(y.train,x.train, class.method="svm") {
+        library(klaR)
+        par(mar=rep(1,4),oma=rep(1,4))
+        partimat(y.train~.,data=x.train,method=class.method)
+    }
+    viz_scatterplot <- function(y.train, x.train, n=nb.attr) {
+        # Scatterplot for 3 Group Problem 
+    pairs(x.train[1:n], main="", pch=22, 
+          bg=rainbow(length(levels(y.train)))[unclass(y.train)])
+    }
+    
+
+#################################################################################
+### NAIVE BAYES
+naivebayes_wrap <- function(x.train, y.train, x.test, y.test, laplac=1, prob.cutoff=0.8, classification.type="kWh") {
+    library(e1071)
+    #y.train <- as.factor(y.train)
+    #y.test <- as.factor(y.test)
+    fit <- naiveBayes(y.train~., data=x.train,laplace=laplac)
+    # evaluate and report
+        summary(fit)
+        fitted.test <- predict(fit, x.test)
+        #fitted.train <- ifelse( (predict(fit,x.train)[,2] > prob.cutoff), 1, -1)
+        fitted.train <- predict(fit, x.train)
+    if (classification.type=="kWh") {
+        plot(fitted.test, y.test, col="blue"); abline(a=0, b=1, col="gray30")
+        print(paste("MSE on test set:",mean(y.test-fitted.test)^2))
+    
+    }
+    if (classification.type=="extreme user identification") {
+        print(paste("Recall on train set:",sum((fitted.train==1)&(y.train.f==1)) / sum(y.train.f==1)))
+        print(paste("Percent error on train set:",1-sum(fitted.train==y.train.f)/length(y.train.f)))    
+        print(table(fitted.train, y.train.f))    
+        print(paste("Recall on test set:",sum((fitted.test==1)&(y.test.f==1)) / sum(y.test.f==1)))
+        print(paste("Percent error on test set:",1-sum(fitted.test==y.test.f)/length(y.test.f)))    
+        print(table(fitted.test, y.test.f))  
+    }
+    fit
+}
+    
+     
+#####################################################################################
+### K-NEAREST NEIGHBORS
+k_nearest <- function(y.train, x.train, y.test, x.test, max.k=1, test.on.test.set=F) {
+    library(class)
+    #y.train <- as.factor(y.train)
+    #y.test <- as.factor(y.test)
+    max.iter <- max.k
+    test.er <- train.er <- recall <- rep(0,max.iter)
+    for (k in 1:max.iter) {
+        fit <- knn(train=x.train, test=x.train, cl=y.train, k=k, prob=T)  # using training set itself as the test, to get the training error
+        train.er[k] <- 1-sum(y.train==fit)/length(y.train)
+        fit.test <- knn(x.train, x.test, y.train, k=k, prob=T)  # providing test set
+        test.er[k] <- 1-sum(y.test==fit.test)/length(y.test)
+        recall[k] <- sum((y.test==1)&(fit.test==1))/sum(y.test==1)
+    }
+    # plot the cv error for different k values
+        par(mfrow=c(2,1))
+        plot(train.er, col="blue", type="b",ylim=c(0,ceiling(10*max(test.er))/10),
+             main="k-nearest neighbor errors for surge data",
+             ylab="Training and Test Error", xlab="K", cex=0.8)
+        lines(test.er, col="red", type="b")
+        legend("topleft",c("Training Error","Test Error"),bty="n",fill=c("blue","red"))
+    # plot recall
+        plot(recall, col="blue", type="b",
+             main="Recall values for surge data",
+             ylab="Recall", xlab="K", cex=0.8)
+        legend("topleft",c("Recall"),bty="n",fill=c("blue"))
+        par(mfrow=c(1,1))
+    # choose the model with lowest errors among all k values
+        print("NOW FITTING THE BEST MODEL BASED ON TEST ERROR")
+        k <- which.min(test.er)
+    # fit and evaluate based on training set
+        fit <- knn(train=x.train, test=x.train, cl=y.train, k=k, prob=T)
+        print(paste("Recall on training set:",sum((y.train==1)&(fit==1))/sum(y.train==1)))
+        print(paste("Percent training error:",1-sum((y.train==fit))/length(y.train)))
+        print(table(fit, y.train))
+    # fit and evaluate based on test set
+        fit <- knn(train=x.train, test=x.test, cl=y.train, k=k, prob=T)
+        print(paste("Recall on test set:",sum((y.test==1)&(fit==1))/sum(y.test==1)))
+        print(paste("Percent test error:",1-sum((y.test==fit))/length(y.test)))
+        print(table(fit, y.test))
+    fit
+}
+    
+### my implementation for knn cross validation
+my_k_nearest_cv <- function(max.k=10, cv=5, y.train.cv, x.train.cv, x.train, y.train, x.test, y.test) {
+    cv.er <- recall <- matrix(rep(0,cv*max.k), ncol=max.k)
+    for (k in 1:max.k) {
+        for (i in 1:cv) {
+            y.train <- c(y.train.cv[,-i])
+            x.train1 <- rbind(x.train.cv[c(1:5)[-i]]); x.train <- do.call("rbind",x.train1)
+            y.test <- c(y.train.cv[,i])
+            x.test <- data.frame(x.train.cv[i])
+            fit <- knn(train=x.train, test=x.test, cl=y.train, k=k, prob=F)# DONT USE k_nearest because it returns the fit with lowest error among all k values which may not be the k you are interested in
+            cv.er[i,k] <- 1-sum(y.test==fit)/length(y.test)
+            print(paste("CV Error:", mean(cv.er)))
+            print(paste("K for CV Min Error:", which.min(cv.er)))
+            recall[i,k] <- sum((y.test==1)&(fit==1))/sum(y.test==1)
+            #print(paste())
+        }
+    }
+    # cv error plot for different k values
+        par(mfrow=c(2,1),mar=rep(2,4), oma=rep(3,4))
+        plot(colSums(cv.er)/nrow(cv.er), col="blue", type="b",  #ylim=c(0,ceiling(10*max(colSums(cv.er)/nrow(cv.er)))/10),
+             main="k-nearest neighbor cv error\nfor surge data | Amir Kavousian", cex=0.8,
+             xlab="CV Error", ylab="K")
+        legend("topright",c("CV error"),bty="n",fill=c("blue"))
+    # recall plot for different k values   
+        plot(colSums(recall)/nrow(recall), col="blue", type="b",  #ylim=c(0,ceiling(10*max(colSums(cv.er)/nrow(cv.er)))/10),
+             main="k-nearest recall values for surge data",
+             xlab="Recall", ylab="K", cex=0.8)
+        legend("topright",c("Recall"),bty="n",fill=c("blue"))
+        par(mfrow=c(1,1),mar=rep(2,4), oma=rep(2,4))
+    # choose the model with the lowest cv error among all k values and report
+        print(paste("Lowest CV error:",min(colSums(cv.er)/nrow(cv.er))))
+        print(paste("k for lowest CV error:",k <- which.min(colSums(cv.er)/nrow(cv.er))))
+    # restoring full y.train and x.train data
+        y.train2 <- c(y.train.cv); x.train2 <- do.call("rbind",x.train.cv)
+    # evaluate and report the chosen model based on training set
+        fit <- knn(train=x.train,test=x.train,cl=y.train,k=k,prob=T)
+        print(paste("Recall on training set:",sum((y.train==1)&(fit==1))/sum(y.train==1)))
+        print(paste("Percent training error:",1-sum((y.train==fit))/length(y.train)))
+        print(table(y.train, fit))
+    # evaluate and report the chosen model based on test set
+        fit <- knn(train=x.train, test=x.test, cl=y.train, k=k,prob=T)
+        print(paste("Recall on test set:",sum((y.test==1)&(fit==1))/sum(y.test==1)))
+        print(paste("Percent test error:", 1-sum(y.test==fit)/length(y.test)))
+        print(table(y.test, fit))
+    fit
+}
+    
+### Cross Validation KNN
+k_nearest_cv <- function(y.train, x.train, x.test, y.test, max.k=10) {
+    library(class)
+    x.train <- x.train
+    y.train <- as.factor(y.train)
+    cv.er <- rep(0,max.k)
+    for (k in 1:max.k) {
+        fit <- knn.cv(train=x.train, cl=y.train, k=k, prob=T)  # using training set itself as the test, to get the training error
+        cv.er[k] <- 1-sum(y.train==fit)/length(y.train)
+    }
+    # plot the cv error for different k values
+        par(mar=rep(3,4), oma=rep(2,4))
+        plot(cv.er, col="blue", type="b",
+            main="k-nearest neighbor cross validation error\nfor surge data | Amir Kavousian",
+            ylab="CV Error", xlab="K", cex=0.8)
+        legend("topright", c("CV Error"), bty="n", fill=c("blue"))
+    # choose the model with lowest error among all k values
+        k <- which.min(cv.er)
+        fit <- knn.cv(train=x.train, cl=y.train, k=k,prob=T)
+    # evaluate and report
+        print(paste("Lowest CV Error:",1-sum(y.train==fit)/length(y.train)))
+        print(paste("K for Lowest CV Error:",k))
+    # evaluate and report the chosen model based on train set
+        fit <- knn(train=x.train, test=x.train, cl=y.train, k=k, prob=T)
+        print(paste("Recall on training set:",sum((y.train==1)&(fit==1))/sum(y.train==1)))
+        print(paste("Percent training error:",1-sum((y.train==fit))/length(y.train)))
+        print(table(y.train, fit))
+    # evaluate and report the chosen model based on test set
+        fit <- knn(train=x.train,test=x.test,cl=y.train,k=k,prob=T)
+        print(paste("Recall on test set:",sum((y.test==1)&(fit==1))/sum(y.test==1)))
+        print(paste("Percent test error:",1-sum((y.test==fit))/length(y.test)))
+        print(table(y.test, fit))
+    fit
+}
+ 
+#######################################################################################
+### RECURSIVE PARTITIONING USING RPART
+rpart_wrap <- function(y.train, x.train, y.test, x.test, max.dep=10, test.set.provided=F, rpart.method="class", predict.type="class") {
+    #y.train <- as.factor(y.train)
+    if(test.set.provided) y.test <- as.factor(y.test)   
+    train.er <- test.er <- rep(0,max.dep)
+    library(rpart)
+    for (dep in 1:max.dep) {
+        fit <- rpart(y.train~.,x.train, method=rpart.method,
+            control=rpart.control(minsplit=0, cp=-1,minbucket=0,maxcomplete=0,
+            maxsurrogate=0,usesurrogate=0, xval=10,maxdepth=dep))
+        fitted.values <- round(predict(fit,x.train,type=predict.type),2)
+        train.er[dep] <- sum(y.train!=fitted.values) / length(y.train)
+        if(test.set.provided) {
+            predicted.values <- predict(fit,x.test,type=predict.type)
+            test.er[dep] <- sum(y.test!=predicted.values) / length(y.test)  
+        }
+    }
+    # plot error diagrams
+        #par(oma=rep(3,4), mar=rep(3,4))
+        y.lim <- c(min(test.er, train.er), max(test.er, train.er))# range(train.er); if(test.set.provided) y.lim <- range(test.er)
+        plot(train.er, main="Classification Error Diagram\nfor rpart()", pch=19,
+             ylab="Classification Error",xlab="Tree Depth",
+             col="blue",type="b",ylim=y.lim, cex=0.8)
+        #par(new=T, mfrow=c(1,1))
+        if(test.set.provided) lines(test.er,col="red",type="b",pch=19,ylab="",xlab="",yaxt="n",xaxt="n")
+        legend("bottomleft",c("Training Error", "Test Error"),fill=c("blue","red"),bty="n")
+    # fit with the lowest error rate
+        fit <- rpart(y.train~.,x.train, method=rpart.method,
+            control=rpart.control(minsplit=0,minbucket=0,cp=-1,maxcomplete=0,
+            maxsurrogate=0,usesurrogate=0, xval=10,maxdepth=which.min(train.er))) #    
+        
+        plot_rpart(fit, y.train)
+    # evaluate and report the fit based on the train set
+        pred.train <- round(predict(fit, x.train, type=predict.type),2)
+        print(paste("Training error:", sum(y.train!=pred.train) / length(y.train)))
+        print(paste("Recall on train set:",sum((y.train==1)&(pred.train==1))/sum(y.train==1)))
+        print(table(y.train, pred.train))
+    # evaluate and report the fit based on the test set
+        if(test.set.provided) {
+            pred.test <- round(predict(fit, x.test, type=predict.type),2)
+            print(paste("Test error:", sum(y.test!=pred.test) / length(y.test)))
+            print(paste("Recall on test set:",sum((y.test==1)&(pred.test==1))/sum(y.test==1)))
+            print(table(y.test, pred.test))
+        }
+    fit
+}
+   
+plot_rpart <- function(fit, y.train) {
+    library(rpart)
+    library(rpart.plot)
+    # text reports
+        printcp(fit)
+        print(fit)
+        summary(fit)
+    # plot cptable
+        plot(fit$cptable)
+    # R2 and Relative Error v. Nb of Splits
+        par(mfrow=c(1,2))
+        #rsq.rpart(fit)  # only works when cross-validated results are available
+        par(mfrow=c(1,1))
+    # tree plot
+        par(mar=rep(1,4), oma=rep(1,4),mfrow=c(2,1))
+        plot(fit, uniform=TRUE, margin=0.1,branch=0.5)
+        text(fit, use.n=TRUE, all=TRUE, cex=.5, digits=2)
+    # mosaic plot
+        rn <- rownames(fit$frame)
+        lev <- rn[sort(unique(fit$where))]
+        where <- factor(rn[fit$where],levels=lev)
+        mosaicplot(table(where,y.train),main="",xlab="",las=1)
+        par(mar=rep(1,4), oma=rep(1,4),mfrow=c(1,1))
+    # a better tree plot
+        library(maptree); draw.tree(fit)
+    # plot residuals
+        plot(predict(fit),resid(fit))
+        axis(3,at=fit$frame$yval[fit$frame$var=='<leaf>'],labels=row.names(fit$frame)[fit$frame$var=='<leaf>'])
+        mtext('leaf number',side=3, line=3)
+        abline(h=0)
+
+}   
+ 
+    
+#######################################################################################
+### SUPPORT VECTOR MACHINES
+svm_wrap <- function(x.total, y.total, x.train, y.train, x.test, y.test,cv=10, penalty=1, kern="radial") {
+    library(e1071)
+    y.total <- as.factor(y.total)
+    y.train <- as.factor(y.train)
+    y.test <- as.factor(y.test)
+    fit <- svm(x.total,y.total,kernel=kern, cross=cv, cost=penalty)
+    # evaluate and report
+        summary(fit)
+        fitted.test <- predict(fit, x.test)
+        fitted.train <- predict(fit, x.train)
+        print(paste("Recall on train set:",sum((fitted.train==1)&(y.train==1)) / sum(y.train==1)))
+        print(paste("Percent error on train set:",1-sum(fitted.train==y.train)/length(y.train)))    
+        print(table(fitted.train, y.train))
+        print(paste("Recall on test set:",sum((fitted.test==1)&(y.test==1)) / sum(y.test==1)))
+        print(paste("Percent error on test set:",1-sum(fitted.test==y.test)/length(y.test)))    
+        print(table(fitted.test, y.test))    
+}
+    
+#################################################################################
+### RANDOM FORESTS (sampling on attributes)
+### Random Forest using default RENDOMFOREST()
+random_forest <- function(x.train, x.test, y.train, y.test, n.tree=500, prox=T,max.nodes=50, cutoff.vector=c(1/3,2/3), classification.type="extreme user identification") {
+    library(randomForest)
+    #y.train <- as.factor(y.train)
+    #y.test <- as.factor(y.test)
+    if(classification.type == "extreme user identification") {
+        fit <- randomForest(y=y.train, x=x.train, xtest=x.test, ytest=y.test, 
+            ntree=n.tree, corr.bias=T, proximity=prox, importance=T, cutoff=cutoff.vector,
+            maxnodes=max.nodes)
+    }
+    if(classification.type == "kWh") {
+        fit <- randomForest(y=y.train, x=x.train, xtest=x.test, ytest=y.test, 
+            ntree=n.tree, corr.bias=T, proximity=prox, importance=T,
+            maxnodes=max.nodes)
+    }
+    # evaluate and report
+        print(paste("Percent training error:",1-sum(y.train==(fit$predicted))/length(y.train)))  # training error = 0
+        print(paste("Recall on training set:",sum((y.train==1)&(fit$predicted==1))/sum(y.train==1)))
+        print(table(fit$predicted, y.train))
+        print(paste("Percent test error:",1-sum(y.test==(fit$test$predicted))/length(y.test)))  # test error
+        print(paste("Recall on test set:",sum((y.test==1)&(fit$test$predicted==1))/sum(y.test==1)))    
+        print(table(fit$test$predicted, y.test))
+        plot(fit, log="y")
+        varImpPlot(fit, pch=19, cex=0.8)
+        #library(RColorBrewer)
+        #MDSplot(rf.fit, y.train, k=3, palette=c("red","blue"))
+    fit
+}
+
+### Random Forest using CFOREST()
+    # This implementation of the random forest (and bagging) algorithm differs from 
+    # the reference implementation in randomForest with respect to 
+    # the base learners used and the aggregation scheme applied    
+c_forest <- function(x.train, y.train) {
+    library(party)
+    y.train <- as.factor(y.train)
+    y.test <- as.factor(y.test)
+    cf.fit <- cforest(y.train~., x.train,controls=cforest_unbiased())
+    # evaluate and report
+        fitted <- predict(cf.fit)
+        print(paste("Percent training error:",1-sum(y.train==(fitted))/length(y.train)))  # training error = 0
+        print(paste("Recall on training set:",sum((y.train==1)&(fitted==1))/sum(y.train==1)))
+        print(table(fitted, y.train))
+        #print(paste("Percent test error:",1-sum(y.test==(fit$test$predicted))/length(y.test)))  # test error
+        #print(paste("Recall on test set:",sum((y.test==1)&(fit$test$predicted==1))/sum(y.test==1)))    
+        #print(table(fit$test$predicted, y.test))
+        print(cf.fit)
+        proximity(cf.fit)
+        treeresponse(cf.fit)
+    fit
+}
+    
+#################################################################################
+### BOOSTING WITH ADABOOSTING USING RPART CLASSIFIER AS BASE CLASSIFIER
+# NOTE: This implementation of boosting works for binary classification variables
+# that are representated as -1/+1
+boost.rpart <- function(y.train, x.train, shrink=0.1, rpart.method="class", niter=50, prune=F, prob.cutoff=0.8) {
+    ###<<<NOTE: this function is written for numeric y values with two levels of -1 and +1 >>>###
+    y.train <- ifelse(y.train==1, 1, -1)
+    y.test <- ifelse(y.test==1, 1, -1)
+    exp.loss <- train.error <- rep(0,niter) # Keep track of errors
+    exp.loss.test <- test.error <- rep(0,500)
+    f <- rep(0,nrow(x.train)) # 130 pts in training data
+    f.test<-rep(0,nrow(x.test)) # 78 pts in test data
+    i <- 1
+    library(rpart)
+    while(i <= niter){
+        print(i)
+        w <- exp(-y.train*f) # This is a shortcut to compute w
+        w <- w/sum(w)
+        fit <- rpart(y.train~.,data=x.train,w,method="class")  # rpart is similar to tree (CART) but differs from it mainly in its handling of surrogate variables
+        g <- -1 + 2*(predict(fit,x.train)[,2] > .5) # make -1 or 1
+        g.test <- -1 + 2*(predict(fit,x.test)[,2] > .5)  #predict(fit,x.test)[,2] is the probability of the class being 1; predict(fit,x.test)[,1] is the probability of the class being -1
+        e <- sum(w * (y.train*g < 0) )  # the weighted error rate
+        alpha <- .5*log ( (1-e) / e )   # half of the log-odds of the weighted error rate
+        f <- f + shrink*alpha*g  # new classification is a weighted average of all past classifications
+        f.test <- f.test + shrink*alpha*g.test
+        exp.loss[i] <- sum(exp(-y.train*f)) / length(x.train)
+        exp.loss.test[i] <- sum(exp(-y.test*f.test)) / length(x.test) 
+        train.error[i] <- sum(1*f*y.train < 0) / length(x.train)  # 130 is the number of data points
+        test.error[i] <- sum(1*f.test*y.test < 0) / length(x.test)
+        i <- i + 1
+    }
+    # evaluate and report
+        fitted.train <- ifelse( (predict(fit,x.train)[,2] > predict(fit,x.train)[,1]), 1, -1)
+        fitted.train <- ifelse( (predict(fit,x.train)[,2] > prob.cutoff), 1, -1)
+        print(paste("Average training error:",round(mean(train.error),2)))
+        table(fitted.train, y.train)
+        fitted.test <- ifelse( (predict(fit,x.test)[,2] > prob.cutoff), 1, -1)
+        print(paste("Average test error:",round(mean(test.error),2)))
+        table(fitted.test, y.test)
+    # plot errors
+        par(oma=rep(2,4), mar=rep(2,4))
+        plot(seq(1,niter),train.error,type="l", ylim=range(test.error), col="black",
+             ylab="Error Rate",xlab="Iterations",lwd=2,
+             main="Error for Household Classification\nUsing Boosting Methods and CART as Base Classifier")
+        lines(test.error,lwd=2,col="purple")
+        legend("topright",c("Training Error", "Test Error"), col=c("black", "purple"),lwd=2)
+
+    # prune the tree
+    if (prune) {
+        fit<- prune(fit, cp=   fit$cptable[which.min(fit$cptable[,"xerror"]),"CP"])
+        plot(fit, uniform=TRUE, main="Pruned Regression Tree", cex=0.8)
+        text(fit, use.n=TRUE, all=TRUE, cex=.5)
+    }
+    fit
+}    
+########################################################################################
+### ADABoost using R package ada    
+ada_wrap <- function(x.train, y.train, x.test, y.test,iter=50) {
+    library(ada)
+    fit <- ada(x=x.train, y=y.train, test.x=x.test, test.y=y.test, loss="exponential", max.iter=iter)
+    plot(fit)
+    #fit$model$trees[[1:50]]  # choose and plot a tree if desired
+    # evaluate and report based on training set
+    
+    # evaluate and report based on test set
+        print(paste("Average test error:", mean(fit$model$errs[,3]))) 
+        print(paste("Recall on train set:", sum((y.train==1)&(fit$fit==1))/sum(y.train==1)))
+        print(fit$confusion)
+    fit
+}    
+
+##############################################################################################
+### DISCRIMINANT ANALYSIS
+lda_wrap <- function(x.train, y.train, x.test, y.test) {
+    library(MASS)
+    y.train <- as.factor(y.train)
+    y.test <- as.factor(y.test)
+    fit <- lda(y.train~., data=x.train, CV=TRUE)  
+    summary(fit)
+    print(paste("Recall on train set:",sum((fit$class==1)&(y.train==1)) / sum(y.train==1)))
+    print(paste("Percent error on train set:",1-sum(fit$class==y.train)/length(y.train)))    
+    print(ct <- table(fit$class, y.train))
+    #diag(prop.table(ct, 1)); sum(diag(prop.table(ct)))  # is the proportion of between-class variance that is explained by successive discriminant functions
+    #plot(fit, dimen=1, type="both")
+    fit
+}
+
+
+
+
+###################################################################################
+### Recursive clustering using Party package
+# The party package provides nonparametric regression trees for 
+# nominal, ordinal, numeric, censored, and multivariate responses.
+recurs_part_party <- function() {
+    library(party)
+    fit <- ctree(y~.,x)
+    plot(fit, "Conditional Inference Tree")
+}
+
+  
