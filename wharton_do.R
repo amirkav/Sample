@@ -1,6 +1,6 @@
 wd <- "C:/Users/amir/Documents/_My_Academics__General/R/R_Projects/Wharton"
 ###############################################################################
-### Manual
+### Read the data
 all.zips <- db.getZips()[,1]  # all zips in the database
 ids <- db.getSPs(all.zips[1])[,1]  # all user ids in a zipcode
 zip.cons <- db.getAllData(all.zips[1]); dim(zip.cons)  # 15-min elec cons data for a given zip
@@ -13,6 +13,7 @@ zip.weather.data <- WeatherClass(all.zips[1]); names(zip.weather.data)
   # days: unique dates; set: sets the value of an existing column; add: adds a new data frame to the list
 zip.weather.data$rh(zip.weather.data$tout, zip.weather.data$dp)
 
+### Exploratory plots
 user.data <- ResDataClass(ids[1]); names(user.data)
 plot(user.data)
 plot(r=user.data,type='temp')
