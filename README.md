@@ -1,8 +1,5 @@
-Sample
+Workflow
 ======
-
-Samples codes from a few past projects. Data files are not publicly shared due to data confidentiality.
-
 The workflow is as follows:
 R codes are broken down into 4 main files: load, clean, func, do.
 - "load.R" contains the code to load all the data and R packages to do the analysis.
