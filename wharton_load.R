@@ -14,14 +14,14 @@ wharton.wkfl <- "C:/Users/amir/Documents/_My_Academics__General/R/R_Projects/Wha
 # acs.utility.payment <- read.csv("C:/Users/amir/Documents/_My_Academics__General/R/R_Projects/PGE/Data/ACS_11_5YR_B25069.csv")  
 
 ### Connect to MySQL database on Amazon AWS
-# db="pgefinal"
-# verbose=F
-# con <- dbConnect(dbDriver("MySQL"), 
-#                  host = "emacdb.c07mqwpylqtq.us-west-1.rds.amazonaws.com",
-#                  user = "amirk", password = "wharton20i3pg3", 
-#                  dbname = "pgefinal")
-# (tabs.list = dbListTables(con))
-# dbDisconnect(con)
+db="pgefinal"
+verbose=F
+con <- dbConnect(dbDriver("MySQL"), 
+                 host = "emacdb.c07mqwpylqtq.us-west-1.rds.amazonaws.com",
+                 user = "amirk", password = "wharton20i3pg3", 
+                 dbname = "pgefinal")
+(tabs.list = dbListTables(con))
+dbDisconnect(con)
 
 # if AWS is down, use these codes to read the data from file
 #   if(is.null(cons15min) || is.null(zip.weather)) {
